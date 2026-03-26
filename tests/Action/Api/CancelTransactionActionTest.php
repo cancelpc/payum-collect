@@ -1,88 +1,36 @@
 <?php
 
+namespace PayumTW\Collect\Tests\Action\Api;
+
 use Mockery as m;
+use PHPUnit\Framework\TestCase;
 use Payum\Core\Bridge\Spl\ArrayObject;
+use PayumTW\Collect\Request\Api\CancelTransaction;
 use PayumTW\Collect\Action\Api\CancelTransactionAction;
 
-class CancelTransactionActionTest extends PHPUnit_Framework_TestCase
+class CancelTransactionActionTest extends TestCase
 {
-    public function tearDown()
+    protected function tearDown()
     {
         m::close();
     }
 
-    public function test_execute()
+    public function testExecute()
     {
-        /*
-        |------------------------------------------------------------
-        | Arrange
-        |------------------------------------------------------------
-        */
-
-        $request = m::spy('PayumTW\Collect\Request\Api\CancelTransaction, ArrayAccess');
-        $api = m::spy('PayumTW\Collect\Api');
-        $input = [
-            'cust_order_no' => 'foo.cust_order_no',
-            'order_amount' => 'foo.order_amount',
-        ];
-        $details = new ArrayObject($input);
-
-        $endpoint = 'foo.endpoint';
-        $data = ['foo.data'];
-
-        /*
-        |------------------------------------------------------------
-        | Act
-        |------------------------------------------------------------
-        */
-
-        $request
-            ->shouldReceive('getModel')->andReturn($details);
-
-        $api
-            ->shouldReceive('cancelTransaction')->andReturn($details);
-
         $action = new CancelTransactionAction();
-        $action->setApi($api);
+        $request = new CancelTransaction(new ArrayObject($details = [
+            'cust_order_no' => 'foo',
+            'order_amount' => 'foo',
+        ]));
 
-        /*
-        |------------------------------------------------------------
-        | Assert
-        |------------------------------------------------------------
-        */
+        $action->setApi(
+            $api = m::mock('PayumTW\Collect\Api')
+        );
+
+        $api->shouldReceive('cancelTransaction')->once()->with((array) $request->getModel())->andReturn($params = ['foo' => 'bar']);
 
         $action->execute($request);
-        $request->shouldHaveReceived('getModel')->twice();
-        $api->shouldHaveReceived('cancelTransaction')->with($input)->once();
-    }
 
-    /**
-     * @expectedException Payum\Core\Exception\UnsupportedApiException
-     */
-    public function test_throw_exception_when_api_is_error()
-    {
-        /*
-        |------------------------------------------------------------
-        | Arrange
-        |------------------------------------------------------------
-        */
-
-        $request = m::spy('PayumTW\Collect\Request\Api\CancelTransaction, ArrayAccess');
-        $api = m::spy('stdClass');
-
-        /*
-        |------------------------------------------------------------
-        | Act
-        |------------------------------------------------------------
-        */
-
-        $action = new CancelTransactionAction();
-        $action->setApi($api);
-
-        /*
-        |------------------------------------------------------------
-        | Assert
-        |------------------------------------------------------------
-        */
+        $this->assertSame(array_merge($details, $params), (array) $request->getModel());
     }
 }

@@ -1,93 +1,46 @@
 <?php
 
+namespace PayumTW\Collect\Tests\Action;
+
 use Mockery as m;
+use Payum\Core\Request\Notify;
+use PHPUnit\Framework\TestCase;
 use Payum\Core\Reply\ReplyInterface;
 use Payum\Core\Bridge\Spl\ArrayObject;
+use Payum\Core\Request\GetHttpRequest;
 use PayumTW\Collect\Action\NotifyAction;
 
-class NotifyActionTest extends PHPUnit_Framework_TestCase
+class NotifyActionTest extends TestCase
 {
-    public function tearDown()
+    protected function tearDown()
     {
         m::close();
     }
 
-    public function test_notify_success()
+    public function testExecute()
     {
-        /*
-        |------------------------------------------------------------
-        | Arrange
-        |------------------------------------------------------------
-        */
-
-        $request = m::spy('Payum\Core\Request\Notify');
-        $gateway = m::spy('Payum\Core\GatewayInterface');
-        $api = m::spy('PayumTW\Collect\Api');
-
-        $apiId = 'CC0000000001';
-        $transId = '550e8400e29b41d4a716446655440000';
-        $orderNo = 'PO5488277';
-        $amount = 1250;
-        $status = 'B';
-        $paymentCode = 1;
-        $paymentDetail = [
-            'auth_code' => '123456',
-            'auth_card_no' => '0000',
-        ];
-        $memo = [];
-        $expireTime = '2013-09-28T08:15:00+08:00';
-        $createTime = '2013-09-28T08:00:00+08:00';
-        $modifyTime = '2013-09-28T08:30:00+08:00';
-        $nonce = '1234569999';
-
-        $checksum = md5($apiId.':'.$transId.':'.$amount.':'.$status.':'.$nonce);
-
-        $returnValue = [
-            'api_id' => $apiId,
-            'trans_id' => $transId,
-            'order_no' => $orderNo,
-            'amount' => $amount,
-            'status' => $status,
-            'payment_code' => $paymentCode,
-            'payment_detail' => $paymentDetail,
-            'memo' => $memo,
-            'expire_time' => $expireTime,
-            'create_time' => $createTime,
-            'modify_time' => $modifyTime,
-            'nonce' => $nonce,
-            'checksum' => $checksum,
-        ];
-
-        $details = new ArrayObject($returnValue);
-
-        /*
-        |------------------------------------------------------------
-        | Act
-        |------------------------------------------------------------
-        */
-
-        $request
-            ->shouldReceive('getModel')->andReturn($details);
-
-        $gateway
-            ->shouldReceive('execute')->with(m::type('Payum\Core\Request\GetHttpRequest'))->andReturnUsing(function ($getHttpRequest) use ($returnValue) {
-                $getHttpRequest->request = $returnValue;
-
-                return $getHttpRequest;
-            });
-
-        $api
-            ->shouldReceive('verifyHash')->with($returnValue)->andReturn(true);
-
         $action = new NotifyAction();
-        $action->setGateway($gateway);
-        $action->setApi($api);
+        $request = new Notify(new ArrayObject([]));
 
-        /*
-        |------------------------------------------------------------
-        | Assert
-        |------------------------------------------------------------
-        */
+        $action->setGateway(
+            $gateway = m::mock('Payum\Core\GatewayInterface')
+        );
+
+        $params = [
+            'foo' => 'bar',
+        ];
+
+        $gateway->shouldReceive('execute')->once()->with(m::on(function ($httpRequest) use ($params) {
+            $httpRequest->request = $params;
+
+            return $httpRequest instanceof GetHttpRequest;
+        }));
+
+        $action->setApi(
+            $api = m::mock('PayumTW\Collect\Api')
+        );
+
+        $api->shouldReceive('verifyHash')->once()->with($params)->andReturn(true);
 
         try {
             $action->execute($request);
@@ -96,88 +49,33 @@ class NotifyActionTest extends PHPUnit_Framework_TestCase
             $this->assertSame('OK', $e->getContent());
         }
 
-        $request->shouldHaveReceived('getModel')->twice();
-        $gateway->shouldHaveReceived('execute')->with(m::type('Payum\Core\Request\GetHttpRequest'))->once();
-        $api->shouldHaveReceived('verifyHash')->with($returnValue)->once();
-        $gateway->shouldHaveReceived('execute')->with(m::type('Payum\Core\Request\Sync'))->once();
+        $this->assertSame($params, (array) $request->getModel());
     }
 
-    public function test_notify_when_checksum_fail()
+    public function testExecuteFail()
     {
-        /*
-        |------------------------------------------------------------
-        | Arrange
-        |------------------------------------------------------------
-        */
-
-        $request = m::spy('Payum\Core\Request\Notify');
-        $gateway = m::spy('Payum\Core\GatewayInterface');
-        $api = m::spy('PayumTW\Collect\Api');
-
-        $apiId = 'CC0000000001';
-        $transId = '550e8400e29b41d4a716446655440000';
-        $orderNo = 'PO5488277';
-        $amount = 1250;
-        $status = 'B';
-        $paymentCode = 1;
-        $paymentDetail = [
-            'auth_code' => '123456',
-            'auth_card_no' => '0000',
-        ];
-        $memo = [];
-        $expireTime = '2013-09-28T08:15:00+08:00';
-        $createTime = '2013-09-28T08:00:00+08:00';
-        $modifyTime = '2013-09-28T08:30:00+08:00';
-        $nonce = '1234569999';
-
-        $checksum = 'A'.md5($apiId.':'.$transId.':'.$amount.':'.$status.':'.$nonce);
-
-        $returnValue = [
-            'api_id' => $apiId,
-            'trans_id' => $transId,
-            'order_no' => $orderNo,
-            'amount' => $amount,
-            'status' => $status,
-            'payment_code' => $paymentCode,
-            'payment_detail' => $paymentDetail,
-            'memo' => $memo,
-            'expire_time' => $expireTime,
-            'create_time' => $createTime,
-            'modify_time' => $modifyTime,
-            'nonce' => $nonce,
-            'checksum' => $checksum,
-        ];
-
-        $details = new ArrayObject($returnValue);
-
-        /*
-        |------------------------------------------------------------
-        | Act
-        |------------------------------------------------------------
-        */
-
-        $request
-            ->shouldReceive('getModel')->andReturn($details);
-
-        $gateway
-            ->shouldReceive('execute')->with(m::type('Payum\Core\Request\GetHttpRequest'))->andReturnUsing(function ($getHttpRequest) use ($returnValue) {
-                $getHttpRequest->request = $returnValue;
-
-                return $getHttpRequest;
-            });
-
-        $api
-            ->shouldReceive('verifyHash')->with($returnValue)->andReturn(false);
-
         $action = new NotifyAction();
-        $action->setGateway($gateway);
-        $action->setApi($api);
+        $request = new Notify(new ArrayObject([]));
 
-        /*
-        |------------------------------------------------------------
-        | Assert
-        |------------------------------------------------------------
-        */
+        $action->setGateway(
+            $gateway = m::mock('Payum\Core\GatewayInterface')
+        );
+
+        $params = [
+            'foo' => 'bar',
+        ];
+
+        $gateway->shouldReceive('execute')->once()->with(m::on(function ($httpRequest) use ($params) {
+            $httpRequest->request = $params;
+
+            return $httpRequest instanceof GetHttpRequest;
+        }));
+
+        $action->setApi(
+            $api = m::mock('PayumTW\Collect\Api')
+        );
+
+        $api->shouldReceive('verifyHash')->once()->with($params)->andReturn(false);
 
         try {
             $action->execute($request);
@@ -185,9 +83,5 @@ class NotifyActionTest extends PHPUnit_Framework_TestCase
             $this->assertSame(400, $e->getStatusCode());
             $this->assertSame('FAIL', $e->getContent());
         }
-
-        $request->shouldHaveReceived('getModel')->twice();
-        $gateway->shouldHaveReceived('execute')->with(m::type('Payum\Core\Request\GetHttpRequest'))->once();
-        $api->shouldHaveReceived('verifyHash')->with($returnValue)->once();
     }
 }

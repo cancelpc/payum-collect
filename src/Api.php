@@ -16,12 +16,12 @@ abstract class Api
     const TIMEZONE = 'Asia/Taipei';
 
     /**
-     * @var HttpClientInterface
+     * @var \Payum\Core\HttpClientInterface
      */
     protected $client;
 
     /**
-     * @var MessageFactory
+     * @var \Http\Message\MessageFactory
      */
     protected $messageFactory;
 
@@ -31,45 +31,26 @@ abstract class Api
     protected $options = [];
 
     /**
-     * @param array               $options
-     * @param HttpClientInterface $client
-     * @param MessageFactory      $messageFactory
+     * $encrypter.
+     *
+     * @var Encrypter
+     */
+    protected $encrypter;
+
+    /**
+     * @param array $options
+     * @param \Payum\Core\HttpClientInterface $client
+     * @param \Http\Message\MessageFactory $messageFactory
+     * @param Encrypter $encrypter
      *
      * @throws \Payum\Core\Exception\InvalidArgumentException if an option is invalid
      */
-    public function __construct(array $options, HttpClientInterface $client, MessageFactory $messageFactory)
+    public function __construct(array $options, HttpClientInterface $client, MessageFactory $messageFactory, Encrypter $encrypter = null)
     {
         $this->options = $options;
         $this->client = $client;
         $this->messageFactory = $messageFactory;
-    }
-
-    /**
-     * @param array $fields
-     *
-     * @return array
-     */
-    protected function doRequest($method, $body, $type = 'cancel', $isJson = true)
-    {
-        $headers = [
-            'Content-Type' => 'application/x-www-form-urlencoded',
-        ];
-
-        if (is_array($body) === true) {
-            $body = http_build_query($body);
-        }
-
-        $request = $this->messageFactory->createRequest($method, $this->getApiEndpoint($type), $headers, $body);
-
-        $response = $this->client->send($request);
-
-        if (false == ($response->getStatusCode() >= 200 && $response->getStatusCode() < 300)) {
-            throw HttpException::factory($request, $response);
-        }
-
-        $contents = $response->getBody()->getContents();
-
-        return $isJson === true ? json_decode($contents, true) : $contents;
+        $this->encrypter = $encrypter ?: new Encrypter();
     }
 
     /**
@@ -81,116 +62,72 @@ abstract class Api
      * createTransaction.
      *
      * @param array $params
-     *
      * @return array
      */
     abstract public function createTransaction(array $params);
 
     /**
-     * getTransactionData.
-     *
-     * @param mixed $params
-     *
-     * @return array
-     */
-    public function getTransactionData(array $params)
-    {
-        $details = [];
-
-        if (empty($params['response']) === false) {
-            if ($this->verifyHash($params['response']) === false) {
-                $details['status'] = '-1';
-
-                return $details;
-            } else {
-                $details = array_merge($details, $params['response']);
-            }
-        } else {
-            if ($this->verifyHash($params) === false) {
-                $details['status'] = '-1';
-
-                return $details;
-            }
-            $details = array_merge($details, $params);
-        }
-
-        return $details;
-    }
-
-    /**
      * Verify if the hash of the given parameter is correct.
      *
      * @param array $params
-     *
      * @return bool
      */
     public function verifyHash(array $params)
     {
-        $hashKey = 'chk';
+        $filters = [
+            'ok' => ['order_amount', 'send_time', 'ret', 'acquire_time', 'auth_code', 'card_no', 'notify_time', 'cust_order_no'],
+            'fail' => ['order_amount', 'send_time', 'ret', 'notify_time', 'cust_order_no'],
+            'status' => ['api_id', 'trans_id', 'amount', 'status', 'nonce'],
+        ];
 
         if (isset($params['status']) === true) {
             $hashKey = 'checksum';
-            $data = $this->only($params, [
-                'api_id',
-                'trans_id',
-                'amount',
-                'status',
-                'nonce',
-            ]);
-        } elseif ($params['ret'] === 'OK') {
-            $data = $this->only($params, [
-                'order_amount',
-                'send_time',
-                'ret',
-                'acquire_time',
-                'auth_code',
-                'card_no',
-                'notify_time',
-                'cust_order_no',
-            ]);
-        } elseif ($params['ret'] === 'FAIL') {
-            $data = $data = $this->only($params, [
-                'order_amount',
-                'send_time',
-                'ret',
-                'notify_time',
-                'cust_order_no',
-            ]);
+            $filterKeys = $filters['status'];
+        } else {
+            $hashKey = 'chk';
+            $filterKeys = $filters[strtolower($params['ret'])];
         }
 
-        return $params[$hashKey] === $this->calculateHash($data);
+        return $params[$hashKey] === $this->calculateHash($params, $filterKeys);
     }
 
-    protected function only($array, $keys)
+    /**
+     * @param string $method
+     * @param array|string $params
+     * @param string $type
+     * @param bool $isJson
+     * @return string
+     */
+    protected function doRequest($method, $params, $type = 'cancel', $isJson = true)
     {
-        $results = [];
-        foreach ($keys as $key) {
-            if (isset($array[$key]) === true) {
-                $results[$key] = $array[$key];
-            }
+        $request = $this->messageFactory->createRequest($method, $this->getApiEndpoint($type), [
+            'Content-Type' => 'application/x-www-form-urlencoded',
+        ], is_array($params) === true ? http_build_query($params) : $params);
+
+        $response = $this->client->send($request);
+
+        $statusCode = $response->getStatusCode();
+        if (false === ($statusCode >= 200 && $statusCode < 300)) {
+            throw HttpException::factory($request, $response);
         }
 
-        return $results;
+        $contents = $response->getBody()->getContents();
+
+        return $isJson === true
+            ? json_decode($contents, true)
+            : $contents;
     }
 
     /**
      * calculateHash.
      *
      * @param array $params
-     *
      * @return string
      */
-    protected function calculateHash($params)
+    protected function calculateHash($params, $filterKeys = [])
     {
-        if (isset($params['status']) === true) {
-            $symbol = ':';
-        } else {
-            $symbol = '$';
-            $params = array_merge([
-                $this->options['hash_base'],
-            ], $params);
-        }
-
-        return md5(implode($symbol, $params));
+        return $this->encrypter
+            ->setKey($this->options['hash_base'])
+            ->encrypt($params, $filterKeys);
     }
 }

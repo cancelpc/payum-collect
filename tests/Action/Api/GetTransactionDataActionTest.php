@@ -1,131 +1,33 @@
 <?php
 
+namespace PayumTW\Collect\Tests\Action\Api;
+
 use Mockery as m;
+use PHPUnit\Framework\TestCase;
 use Payum\Core\Bridge\Spl\ArrayObject;
+use PayumTW\Collect\Request\Api\GetTransactionData;
 use PayumTW\Collect\Action\Api\GetTransactionDataAction;
 
-class GetTransactionDataActionTest extends PHPUnit_Framework_TestCase
+class GetTransactionDataActionTest extends TestCase
 {
-    public function tearDown()
+    protected function tearDown()
     {
         m::close();
     }
 
-    public function test_get_transaction_data()
+    public function testExecute()
     {
-        /*
-        |------------------------------------------------------------
-        | Arrange
-        |------------------------------------------------------------
-        */
-
-        $request = m::spy('PayumTW\Collect\Request\Api\GetTransactionData, ArrayAccess');
-        $api = m::spy('PayumTW\Collect\Api');
-
-        $details = m::mock(new ArrayObject());
-
-        $endpoint = 'foo.endpoint';
-
-        $data = ['status' => '1'];
-
-        /*
-        |------------------------------------------------------------
-        | Act
-        |------------------------------------------------------------
-        */
-
-        $request
-            ->shouldReceive('getModel')->andReturn($details);
-
-        $api
-            ->shouldReceive('getTransactionData')->andReturn($data);
-
         $action = new GetTransactionDataAction();
-        $action->setApi($api);
+        $request = new GetTransactionData(new ArrayObject([]));
 
-        /*
-        |------------------------------------------------------------
-        | Assert
-        |------------------------------------------------------------
-        */
+        $action->setApi(
+            $api = m::mock('PayumTW\Collect\Api')
+        );
+
+        $api->shouldReceive('getTransactionData')->once()->with((array) $request->getModel())->andReturn($params = ['status' => 'ok']);
 
         $action->execute($request);
-        $request->shouldHaveReceived('getModel')->twice();
-        $api->shouldHaveReceived('getTransactionData')->once();
-        $details->shouldHaveReceived('replace')->once();
-    }
 
-    public function test_get_transaction_data_when_status_is_error()
-    {
-        /*
-        |------------------------------------------------------------
-        | Arrange
-        |------------------------------------------------------------
-        */
-
-        $request = m::spy('PayumTW\Collect\Request\Api\GetTransactionData, ArrayAccess');
-        $api = m::spy('PayumTW\Collect\Api');
-
-        $details = m::mock(new ArrayObject());
-
-        $endpoint = 'foo.endpoint';
-
-        $data = ['status' => '-1'];
-
-        /*
-        |------------------------------------------------------------
-        | Act
-        |------------------------------------------------------------
-        */
-
-        $request
-            ->shouldReceive('getModel')->andReturn($details);
-
-        $api
-            ->shouldReceive('getTransactionData')->andReturn($data);
-
-        $action = new GetTransactionDataAction();
-        $action->setApi($api);
-
-        /*
-        |------------------------------------------------------------
-        | Assert
-        |------------------------------------------------------------
-        */
-
-        $action->execute($request);
-        $request->shouldHaveReceived('getModel')->twice();
-        $api->shouldHaveReceived('getTransactionData')->once();
-        $details->shouldNotHaveReceived('replace');
-    }
-
-    /**
-     * @expectedException Payum\Core\Exception\UnsupportedApiException
-     */
-    public function test_throw_exception_when_api_is_error()
-    {
-        /*
-        |------------------------------------------------------------
-        | Arrange
-        |------------------------------------------------------------
-        */
-
-        $request = m::spy('PayumTW\Collect\Request\Api\CancelTransaction, ArrayAccess');
-        $api = m::spy('stdClass');
-
-        /*
-        |------------------------------------------------------------
-        | Act
-        |------------------------------------------------------------
-        */
-
-        $action = new GetTransactionDataAction();
-        $action->setApi($api);
-
-        /*
-        |------------------------------------------------------------
-        | Assert
-        |------------------------------------------------------------
-        */
+        $this->assertSame($params, (array) $request->getModel());
     }
 }

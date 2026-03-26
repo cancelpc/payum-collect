@@ -9,7 +9,7 @@ class CollectCvsApi extends Api
     /**
      * @return string
      */
-    public function getApiEndpoint($type = 'capture')
+    public function getApiEndpoint($type = '')
     {
         return 'https://www.ccat.com.tw/cvs/ap_interface.php';
     }
@@ -18,16 +18,15 @@ class CollectCvsApi extends Api
      * createTransaction.
      *
      * @param array $params
-     *
      * @return array
      */
-    public function createTransaction(array $params, $type = 'redirect')
+    public function createTransaction(array $params, $returnType = 'xml')
     {
         $cmd = 'cvs_order_regiater';
         $supportedParams = [
             'cust_order_number' => null,
             'order_amount' => null,
-            'expire_date' => Carbon::now(static::TIMEZONE)->addDays(7)->toDateTimeString(),
+            'expire_date' => Carbon::now(static::TIMEZONE)->endOfDay()->addDays(7)->toDateTimeString(),
             'payer_name' => null,
             'payer_postcode' => null,
             'payer_address' => null,
@@ -40,43 +39,33 @@ class CollectCvsApi extends Api
             array_intersect_key($params, $supportedParams)
         ));
 
-        return $type === 'redirect' ?
-            array_merge([
+        if (empty($params['expire_date']) === false) {
+            $params['expire_date'] = $this->toIso8601String($params['expire_date']);
+        }
+
+        return $this->options['submit_type'] === 'redirect'
+            ? array_merge([
                 'cmd' => $cmd,
                 'cust_id' => $this->options['cust_id'],
                 'cust_password' => $this->options['cust_password'],
-            ], $params) :
-            $this->parseResponseXML(
-                $this->doRequest('POST', $this->createRequestXML($params, $cmd), 'sync', false)
+            ], $params)
+            : $this->parseResponseXML(
+                $this->doRequest(
+                    'POST',
+                    $this->createRequestXML($params, $cmd),
+                    '',
+                    false
+                )
             );
     }
 
     /**
      * getTransactionData.
      *
-     * @param mixed $params
-     *
-     * @return array
-     */
-    public function getTransactionData(array $params)
-    {
-        if (isset($params['response']) === true && isset($params['response']['ibon_shopid']) === true) {
-            return $params['response'];
-        } elseif (isset($params['ibon_shopid']) === true) {
-            return $params;
-        }
-
-        return parent::getTransactionData($params);
-    }
-
-    /**
-     * createOrderQueryTransaction.
-     *
-     * @param  array  $params
-     *
+     * @param array $params
      * @return string
      */
-    public function createOrderQueryTransaction(array $params)
+    public function getTransactionData(array $params)
     {
         $supportedParams = [
             'process_code_update_time_begin' => Carbon::now(static::TIMEZONE)->toDateTimeString(),
@@ -92,15 +81,19 @@ class CollectCvsApi extends Api
         $params['process_code_update_time_end'] = $this->toIso8601String($params['process_code_update_time_end']);
 
         return $this->parseResponseXML(
-            $this->doRequest('POST', $this->createRequestXML($params, 'cvs_order_query'), 'sync', false)
+            $this->doRequest(
+                'POST',
+                $this->createRequestXML($params, 'cvs_order_query'),
+                '',
+                false
+            )
         );
     }
 
     /**
      * toIso8601String.
      *
-     * @param  string $string
-     *
+     * @param string $string
      * @return string
      */
     protected function toIso8601String($string)
@@ -111,8 +104,7 @@ class CollectCvsApi extends Api
     /**
      * createQueryRequestXML.
      *
-     * @param  array $params
-     *
+     * @param array $params
      * @return string
      */
     protected function createRequestXML($params, $cmd = 'cvs_order_regiater')
@@ -150,19 +142,18 @@ class CollectCvsApi extends Api
     /**
      * parseResponseXML.
      *
-     * @param  string $xml
-     *
+     * @param string $xml
      * @return array
      */
     protected function parseResponseXML($xml)
     {
-        $result = [
+        $response = [
             'status' => 'ERROR',
             'orders' => [],
         ];
 
         if (preg_match('/<status>(.*)<\/status>/', $xml, $matches) !== false) {
-            $result['status'] = $matches[1];
+            $response['status'] = $matches[1];
         }
 
         if (preg_match_all('/<order>(.*)<\/order>/sU', $xml, $matches) !== false) {
@@ -192,15 +183,16 @@ class CollectCvsApi extends Api
             $regexp = '/<(?<key>'.implode('|', $tags).')>(?<value>[^<]*)<\/('.implode('|', $tags).')>/';
             foreach ($orders as $order) {
                 $temp = [];
+                $matches = [];
                 if (preg_match_all($regexp, $order, $matches, PREG_SET_ORDER) !== false) {
                     foreach ($matches as $match) {
                         $temp[$match['key']] = $match['value'];
                     }
                 }
-                $result['orders'][] = $temp;
+                $response['orders'][] = $temp;
             }
         }
 
-        return $result;
+        return $response;
     }
 }

@@ -16,16 +16,15 @@ class CollectApi extends CollectUnionpayApi
             'cancel' => 'https://4128888card.com.tw/cocs/client_order_cancel.php',
             'refund' => 'https://4128888card.com.tw/cocs/client_order_refund.php',
         ];
+        // return $this->options['sandbox'] ? 'https://4128888card.com.tw/cocs/client_order_append.php' : 'https://4128888card.com.tw/cocs/client_order_append.php';
 
         return $urls[$type];
-        // return $this->options['sandbox'] ? 'https://4128888card.com.tw/cocs/client_order_append.php' : 'https://4128888card.com.tw/cocs/client_order_append.php';
     }
 
     /**
      * cancelTransaction.
      *
      * @param array $params
-     *
      * @return array
      */
     public function cancelTransaction(array $params)
@@ -50,10 +49,8 @@ class CollectApi extends CollectUnionpayApi
             array_intersect_key($params, $supportedParams)
         ));
 
-        $params['chk'] = $this->calculateHash([
-            $params['cust_order_no'],
-            $params['order_amount'],
-            $params['send_time'],
+        $params['chk'] = $this->calculateHash($params, [
+            'cust_order_no', 'order_amount', 'send_time',
         ]);
 
         return $this->doRequest('GET', $params, 'cancel');

@@ -32,15 +32,21 @@ class StatusAction implements ActionInterface
             return;
         }
 
-        if ($details['status'] === 'OK') {
-            if (isset($details['refund_amount']) === true) {
-                $request->markRefunded();
+        if (isset($details['link_id']) === true) {
+            if ($details['status'] === 'OK') {
+                if (isset($details['refund_amount']) === true) {
+                    $request->markRefunded();
 
-                return;
-            }
+                    return;
+                }
 
-            if (isset($details['cust_order_no']) === true) {
-                $request->markCanceled();
+                if (isset($details['order_detail']) === false) {
+                    $request->markCanceled();
+
+                    return;
+                }
+
+                $request->markCaptured();
 
                 return;
             }
@@ -52,7 +58,14 @@ class StatusAction implements ActionInterface
             return;
         }
 
-        $apnStatus = [
+        // CVS
+        if (isset($details['link_id']) === false && $details['status'] === 'OK') {
+            $request->markPending();
+
+            return;
+        }
+
+        $statusMap = [
             // B 授權完成
             'B' => 'markCaptured',
             // O 請款作業中(請款作業中，無法進行取消授權)
@@ -64,7 +77,7 @@ class StatusAction implements ActionInterface
             // D 訂單逾期
             'D' => 'markExpired',
             // P 請款失敗
-            'P' => 'markCaptured',
+            'P' => 'markFailed',
             // M 取消交易完成
             'M' => 'markCanceled',
             // N 取消交易失敗
@@ -73,14 +86,10 @@ class StatusAction implements ActionInterface
             'Q' => 'markRefunded',
             // R 取消授權失敗
             'R' => 'markFailed',
-
-            // CVS
-            'OK' => 'markCaptured',
-            'ERROR' => 'markFailed',
         ];
 
-        if (isset($apnStatus[$details['status']]) === true) {
-            call_user_func([$request, $apnStatus[$details['status']]]);
+        if (isset($statusMap[$details['status']]) === true) {
+            call_user_func([$request, $statusMap[$details['status']]]);
 
             return;
         }

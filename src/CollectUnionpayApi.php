@@ -24,7 +24,6 @@ class CollectUnionpayApi extends Api
      * createTransaction.
      *
      * @param array $params
-     *
      * @return array
      */
     public function createTransaction(array $params)
@@ -58,10 +57,7 @@ class CollectUnionpayApi extends Api
             array_intersect_key($params, $supportedParams)
         ));
 
-        $params['chk'] = $this->calculateHash([
-            $params['order_amount'],
-            $params['send_time'],
-        ]);
+        $params['chk'] = $this->calculateHash($params, ['order_amount', 'send_time']);
 
         return $params;
     }
@@ -70,7 +66,6 @@ class CollectUnionpayApi extends Api
      * refundTransaction.
      *
      * @param array $params
-     *
      * @return array
      */
     public function refundTransaction(array $params)
@@ -96,11 +91,8 @@ class CollectUnionpayApi extends Api
             array_intersect_key($params, $supportedParams)
         ));
 
-        $params['chk'] = $this->calculateHash([
-            $params['cust_order_no'],
-            $params['order_amount'],
-            $params['refund_amount'],
-            $params['send_time'],
+        $params['chk'] = $this->calculateHash($params, [
+            'cust_order_no', 'order_amount', 'refund_amount', 'send_time',
         ]);
 
         return $this->doRequest('GET', $params, 'refund');
